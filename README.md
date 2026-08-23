@@ -42,14 +42,14 @@ EduCast flips the traditional e-learning model from **supply-driven** to **deman
 ### 1. Database Setup
 
 ```bash
-# Login to MySQL
-mysql -u root -p
+# Login to PostgreSQL
+psql -U postgres
 
 # Create database
 CREATE DATABASE educast;
 
 # Run migration
-mysql -u root -p educast < backend/migrations/001_initial_schema.sql
+psql -U postgres -d educast -f backend/migrations/001_initial_schema_postgres.sql
 ```
 
 ### 2. Backend Setup

@@ -29,8 +29,8 @@ func LoadConfig() {
 
 	AppConfig = &Config{
 		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "3306"),
-		DBUser:     getEnv("DB_USER", "root"),
+		DBPort:     getEnv("DB_PORT", "5432"),
+		DBUser:     getEnv("DB_USER", "postgres"),
 		DBPassword: getEnv("DB_PASSWORD", ""),
 		DBName:     getEnv("DB_NAME", "educast"),
 		JWTSecret:  getEnv("JWT_SECRET", "default_secret_change_me"),
