@@ -75,8 +75,8 @@ func BroadcastBidCreated(bid models.Bid, studentID uint) {
 	}
 }
 
-func BroadcastBidAccepted(bidID uint, bountyID uint, mentorID uint, roomID string) {
+func BroadcastBidAccepted(bidID uint, bountyID uint, mentorID uint, studentID uint, roomID string) {
 	if GlobalHub != nil {
-		GlobalHub.BroadcastBidAccepted(bidID, bountyID, mentorID, roomID)
+		GlobalHub.BroadcastBidAccepted(bidID, bountyID, mentorID, studentID, roomID)
 	}
 }

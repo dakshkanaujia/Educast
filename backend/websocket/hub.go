@@ -27,7 +27,9 @@ type Hub struct {
 type Message struct {
 	Type      string      `json:"type"`
 	Payload   interface{} `json:"payload"`
-	TargetIDs []uint      `json:"-"` // User IDs to send to (empty = broadcast to all)
+	TargetID  uint        `json:"target_id,omitempty"` // Added for p2p WebRTC signaling
+	SenderID  uint        `json:"sender_id,omitempty"` // Added for p2p WebRTC signaling
+	TargetIDs []uint      `json:"-"`                   // User IDs to send to (empty = broadcast to all)
 }
 
 var GlobalHub *Hub
@@ -67,9 +69,15 @@ func (h *Hub) Run() {
 			}
 
 			h.mu.RLock()
-			if len(message.TargetIDs) > 0 {
+
+			targets := message.TargetIDs
+			if message.TargetID > 0 {
+				targets = append(targets, message.TargetID)
+			}
+
+			if len(targets) > 0 {
 				// Send to specific users
-				for _, userID := range message.TargetIDs {
+				for _, userID := range targets {
 					if client, ok := h.clients[userID]; ok {
 						select {
 						case client.send <- messageBytes:
@@ -131,13 +139,14 @@ func (h *Hub) BroadcastBidCreated(bid models.Bid, studentID uint) {
 }
 
 // Broadcast bid accepted event to specific mentor
-func (h *Hub) BroadcastBidAccepted(bidID uint, bountyID uint, mentorID uint, roomID string) {
+func (h *Hub) BroadcastBidAccepted(bidID uint, bountyID uint, mentorID uint, studentID uint, roomID string) {
 	message := &Message{
 		Type: "bid_accepted",
 		Payload: map[string]interface{}{
-			"bid_id":    bidID,
-			"bounty_id": bountyID,
-			"room_id":   roomID,
+			"bid_id":     bidID,
+			"bounty_id":  bountyID,
+			"student_id": studentID,
+			"room_id":    roomID,
 		},
 		TargetIDs: []uint{mentorID},
 	}

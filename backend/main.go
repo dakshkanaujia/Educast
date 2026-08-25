@@ -64,6 +64,9 @@ func main() {
 
 		// Accept bid route
 		api.POST("/bids/:id/accept", middleware.RequireRole("Student"), controllers.AcceptBid)
+		
+		// My bids route for mentors
+		api.GET("/my-bids", middleware.RequireRole("Mentor"), controllers.GetMyBids)
 	}
 
 	// Health check

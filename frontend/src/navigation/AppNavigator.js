@@ -18,6 +18,7 @@ import CompletionScreen from '../screens/student/CompletionScreen';
 import MentorFeedScreen from '../screens/mentor/MentorFeedScreen';
 import MentorBountyDetailScreen from '../screens/mentor/MentorBountyDetailScreen';
 import PlaceBidScreen from '../screens/mentor/PlaceBidScreen';
+import MyBidsScreen from '../screens/mentor/MyBidsScreen';
 
 const Stack = createStackNavigator();
 
@@ -88,6 +89,11 @@ const AppNavigator = () => {
               name="PlaceBid" 
               component={PlaceBidScreen}
               options={{ title: 'Place Bid' }}
+            />
+            <Stack.Screen 
+              name="MyBids" 
+              component={MyBidsScreen}
+              options={{ title: 'My Bids' }}
             />
             <Stack.Screen 
               name="SessionRoom" 

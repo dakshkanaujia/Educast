@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -12,16 +12,16 @@ import (
 var DB *gorm.DB
 
 func ConnectDatabase() {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
+		AppConfig.DBHost,
 		AppConfig.DBUser,
 		AppConfig.DBPassword,
-		AppConfig.DBHost,
-		AppConfig.DBPort,
 		AppConfig.DBName,
+		AppConfig.DBPort,
 	)
 
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 

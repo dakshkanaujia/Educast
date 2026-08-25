@@ -50,7 +50,7 @@ export const WebSocketProvider = ({ children }) => {
       ws.current.onclose = () => {
         console.log('WebSocket disconnected');
         setConnected(false);
-        
+
         // Attempt to reconnect after 3 seconds
         if (isAuthenticated) {
           reconnectTimeout.current = setTimeout(() => {
@@ -79,12 +79,21 @@ export const WebSocketProvider = ({ children }) => {
     setMessages([]);
   };
 
+  const sendMessage = (message) => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(message));
+    } else {
+      console.error('WebSocket is not connected');
+    }
+  };
+
   return (
     <WebSocketContext.Provider
       value={{
         connected,
         messages,
         clearMessages,
+        sendMessage,
       }}
     >
       {children}

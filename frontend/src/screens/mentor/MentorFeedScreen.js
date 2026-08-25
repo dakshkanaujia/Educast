@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import * as bountyService from '../../services/bounty';
+import { showAlert } from '../../utils/alert';
 
 const MentorFeedScreen = ({ navigation }) => {
   const [bounties, setBounties] = useState([]);
@@ -21,23 +22,22 @@ const MentorFeedScreen = ({ navigation }) => {
       loadBounties(); // Refresh list
     }
 
-    // Listen for accepted bids
+    // Listen for accepted bids - AUTO NAVIGATE to session room
     const acceptedBids = messages.filter(m => m.type === 'bid_accepted');
     if (acceptedBids.length > 0) {
       const latestAccepted = acceptedBids[acceptedBids.length - 1];
-      Alert.alert(
-        'Bid Accepted!',
-        'Your bid has been accepted!',
-        [
-          {
-            text: 'Join Session',
-            onPress: () => navigation.navigate('SessionRoom', {
-              roomId: latestAccepted.payload.room_id,
-              bountyId: latestAccepted.payload.bounty_id,
-            }),
-          },
-        ]
-      );
+
+      // Show success notification
+      showAlert('Bid Accepted!', 'Your bid has been accepted! Joining session room...');
+
+      // Auto-navigate to session room
+      setTimeout(() => {
+        navigation.navigate('SessionRoom', {
+          roomId: latestAccepted.payload.room_id,
+          bountyId: latestAccepted.payload.bounty_id,
+          targetUserId: latestAccepted.payload.student_id,
+        });
+      }, 1500); // Small delay to show the success message
     }
   }, [messages]);
 
@@ -47,7 +47,7 @@ const MentorFeedScreen = ({ navigation }) => {
       const data = await bountyService.getBounties();
       setBounties(data || []);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load bounties');
+      showAlert('Error', 'Failed to load bounties');
     } finally {
       setLoading(false);
     }
@@ -72,9 +72,17 @@ const MentorFeedScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Live Bounty Feed</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.myBidsButton}
+            onPress={() => navigation.navigate('MyBids')}
+          >
+            <Text style={styles.myBidsText}>My Bids</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -108,6 +116,22 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  myBidsButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  myBidsText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   logoutButton: {
     padding: 8,

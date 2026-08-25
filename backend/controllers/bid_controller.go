@@ -83,3 +83,17 @@ func GetBidsForBounty(c *gin.Context) {
 
 	c.JSON(http.StatusOK, bids)
 }
+
+// GetMyBids returns all bids placed by the authenticated mentor
+func GetMyBids(c *gin.Context) {
+	mentorID := c.GetUint("user_id")
+
+	var bids []models.Bid
+	config.DB.Where("mentor_id = ?", mentorID).
+		Preload("Bounty").
+		Preload("Bounty.Student").
+		Order("created_at DESC").
+		Find(&bids)
+
+	c.JSON(http.StatusOK, bids)
+}

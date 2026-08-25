@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log"
 	"time"
 
@@ -46,15 +47,26 @@ func (c *Client) ReadPump() {
 	})
 
 	for {
-		_, _, err := c.conn.ReadMessage()
+		_, messageBytes, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
 			}
 			break
 		}
-		// We don't process incoming messages in this prototype
-		// All communication is server -> client
+
+		// Process incoming messages for signaling
+		var msg Message
+		if err := json.Unmarshal(messageBytes, &msg); err != nil {
+			log.Printf("Error unmarshaling client message: %v. Raw msg: %s", err, string(messageBytes))
+			continue
+		}
+
+		// Inject the sender ID
+		msg.SenderID = c.UserID
+
+		// Route message via Hub
+		c.hub.broadcast <- &msg
 	}
 }
 

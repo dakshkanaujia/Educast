@@ -68,14 +68,15 @@ func AcceptBid(c *gin.Context) {
 		}
 
 		// Broadcast to WebSocket
-		websocket.BroadcastBidAccepted(bid.ID, bid.BountyID, bid.MentorID, roomID)
+		websocket.GlobalHub.BroadcastBidAccepted(bid.ID, bid.BountyID, bid.MentorID, bid.Bounty.StudentID, roomID)
 
 		// Return success response
 		c.JSON(http.StatusOK, gin.H{
-			"message":   "Bid accepted successfully",
-			"room_id":   roomID,
-			"bid":       bid,
-			"mentor_id": bid.MentorID,
+			"message":    "Bid accepted successfully",
+			"room_id":    roomID,
+			"bid":        bid,
+			"student_id": bid.Bounty.StudentID,
+			"mentor_id":  bid.MentorID,
 		})
 
 		return nil

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useWebSocket } from '../../context/WebSocketContext';
 import * as bountyService from '../../services/bounty';
 import * as bidService from '../../services/bid';
+import { showAlert } from '../../utils/alert';
 
 const BountyDetailScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
@@ -29,7 +30,7 @@ const BountyDetailScreen = ({ route, navigation }) => {
       const data = await bountyService.getBountyById(bountyId);
       setBounty(data);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load bounty details');
+      showAlert('Error', 'Failed to load bounty details');
     }
   };
 
@@ -46,7 +47,7 @@ const BountyDetailScreen = ({ route, navigation }) => {
   };
 
   const handleAcceptBid = async (bidId) => {
-    Alert.alert(
+    showAlert(
       'Accept Bid',
       'Are you sure you want to accept this bid?',
       [
@@ -56,13 +57,14 @@ const BountyDetailScreen = ({ route, navigation }) => {
           onPress: async () => {
             try {
               const result = await bidService.acceptBid(bidId);
-              Alert.alert('Success', 'Bid accepted!');
-              navigation.navigate('SessionRoom', { 
+              showAlert('Success', 'Bid accepted!');
+              navigation.navigate('SessionRoom', {
                 roomId: result.room_id,
-                bountyId: bountyId 
+                bountyId: bountyId,
+                targetUserId: result.mentor_id
               });
             } catch (error) {
-              Alert.alert('Error', error.response?.data?.error || 'Failed to accept bid');
+              showAlert('Error', error.response?.data?.error || 'Failed to accept bid');
             }
           },
         },
@@ -116,7 +118,7 @@ const BountyDetailScreen = ({ route, navigation }) => {
       </View>
 
       <Text style={styles.sectionTitle}>Bids ({bids.length})</Text>
-      
+
       {bids.length === 0 ? (
         <Text style={styles.emptyText}>No bids yet. Waiting for mentors...</Text>
       ) : (

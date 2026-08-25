@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import * as bidService from '../../services/bid';
+import { showAlert } from '../../utils/alert';
 
 const PlaceBidScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
@@ -10,22 +11,22 @@ const PlaceBidScreen = ({ route, navigation }) => {
 
   const handleSubmit = async () => {
     if (!priceOffer) {
-      Alert.alert('Error', 'Please enter your bid amount');
+      showAlert('Error', 'Please enter your bid amount');
       return;
     }
 
     if (isNaN(parseFloat(priceOffer)) || parseFloat(priceOffer) <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      showAlert('Error', 'Please enter a valid amount');
       return;
     }
 
     setLoading(true);
     try {
       await bidService.createBid(bountyId, priceOffer, note);
-      Alert.alert('Success', 'Bid placed successfully!');
+      showAlert('Success', 'Bid placed successfully!');
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || 'Failed to place bid');
+      showAlert('Error', error.response?.data?.error || 'Failed to place bid');
     } finally {
       setLoading(false);
     }

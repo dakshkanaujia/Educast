@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import * as bountyService from '../../services/bounty';
+import { showAlert } from '../../utils/alert';
 
 const MentorBountyDetailScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
@@ -15,7 +16,7 @@ const MentorBountyDetailScreen = ({ route, navigation }) => {
       const data = await bountyService.getBountyById(bountyId);
       setBounty(data);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load bounty details');
+      showAlert('Error', 'Failed to load bounty details');
     }
   };
 
