@@ -64,9 +64,21 @@ func main() {
 
 		// Accept bid route
 		api.POST("/bids/:id/accept", middleware.RequireRole("Student"), controllers.AcceptBid)
-		
+
+		// Bid negotiation — either side of a bid may counter, accept, or decline
+		api.POST("/bids/:id/counter", controllers.CounterBid)
+		api.POST("/bids/:id/counter/accept", controllers.AcceptCounter)
+		api.POST("/bids/:id/counter/decline", controllers.DeclineCounter)
+
 		// My bids route for mentors
 		api.GET("/my-bids", middleware.RequireRole("Mentor"), controllers.GetMyBids)
+
+		// Mentor directory + public profile
+		api.GET("/mentors", controllers.GetMentors)
+		api.GET("/mentors/:id", controllers.GetMentorProfile)
+
+		// Real accepted-bid pricing stats for a subject
+		api.GET("/price-insight", controllers.GetPriceInsight)
 	}
 
 	// Health check

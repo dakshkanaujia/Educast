@@ -10,8 +10,10 @@ import (
 )
 
 type CreateBidRequest struct {
-	PriceOffer float64 `json:"price_offer" binding:"required,gt=0"`
-	Note       string  `json:"note"`
+	PriceOffer      float64 `json:"price_offer" binding:"required,gt=0"`
+	Note            string  `json:"note"`
+	DurationMinutes *int    `json:"duration_minutes"`
+	PreferredTime   string  `json:"preferred_time"`
 }
 
 func CreateBid(c *gin.Context) {
@@ -38,11 +40,13 @@ func CreateBid(c *gin.Context) {
 
 	// Create bid
 	bid := models.Bid{
-		BountyID:   bounty.ID,
-		MentorID:   mentorID,
-		PriceOffer: req.PriceOffer,
-		Note:       req.Note,
-		IsAccepted: false,
+		BountyID:        bounty.ID,
+		MentorID:        mentorID,
+		PriceOffer:      req.PriceOffer,
+		Note:            req.Note,
+		DurationMinutes: req.DurationMinutes,
+		PreferredTime:   req.PreferredTime,
+		IsAccepted:      false,
 	}
 
 	if err := config.DB.Create(&bid).Error; err != nil {
@@ -96,4 +100,44 @@ func GetMyBids(c *gin.Context) {
 		Find(&bids)
 
 	c.JSON(http.StatusOK, bids)
+}
+
+type PriceInsightResponse struct {
+	Subject    string  `json:"subject"`
+	SampleSize int64   `json:"sample_size"`
+	MinPrice   float64 `json:"min_price"`
+	MaxPrice   float64 `json:"max_price"`
+	AvgPrice   float64 `json:"avg_price"`
+}
+
+// GetPriceInsight returns real accepted-bid pricing stats for a subject,
+// so a mentor can see what similar sessions actually went for before
+// naming a price. Purely a query over existing data — no fabricated numbers.
+func GetPriceInsight(c *gin.Context) {
+	subject := c.Query("subject")
+	if subject == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "subject is required"})
+		return
+	}
+
+	var result struct {
+		Count int64
+		Min   float64
+		Max   float64
+		Avg   float64
+	}
+
+	config.DB.Model(&models.Bid{}).
+		Joins("JOIN bounties ON bounties.id = bids.bounty_id").
+		Where("LOWER(bounties.subject_tag) = LOWER(?) AND bids.is_accepted = ?", subject, true).
+		Select("COUNT(*) as count, COALESCE(MIN(bids.price_offer),0) as min, COALESCE(MAX(bids.price_offer),0) as max, COALESCE(AVG(bids.price_offer),0) as avg").
+		Scan(&result)
+
+	c.JSON(http.StatusOK, PriceInsightResponse{
+		Subject:    subject,
+		SampleSize: result.Count,
+		MinPrice:   result.Min,
+		MaxPrice:   result.Max,
+		AvgPrice:   result.Avg,
+	})
 }

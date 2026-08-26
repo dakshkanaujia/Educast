@@ -55,9 +55,11 @@ func GetBounties(c *gin.Context) {
 	var bounties []models.Bounty
 
 	if role == "Student" {
-		// Students see only their own bounties
+		// Students see only their own bounties. Bids are preloaded so the
+		// client can group "needs your attention" vs "waiting for bids".
 		config.DB.Where("student_id = ?", userID).
 			Preload("Student").
+			Preload("Bids").
 			Order("created_at DESC").
 			Find(&bounties)
 	} else {

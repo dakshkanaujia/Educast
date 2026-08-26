@@ -33,3 +33,7 @@ backend/tmp/
 *.dll
 *.so
 *.dylib
+
+.backend.pid
+.backend-bin
+backend.log

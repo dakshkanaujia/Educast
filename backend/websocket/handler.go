@@ -80,3 +80,21 @@ func BroadcastBidAccepted(bidID uint, bountyID uint, mentorID uint, studentID ui
 		GlobalHub.BroadcastBidAccepted(bidID, bountyID, mentorID, studentID, roomID)
 	}
 }
+
+func BroadcastBidCountered(bid models.Bid, targetUserID uint) {
+	if GlobalHub != nil {
+		GlobalHub.BroadcastBidCountered(bid, targetUserID)
+	}
+}
+
+func BroadcastCounterResolved(bid models.Bid, targetUserID uint, accepted bool) {
+	if GlobalHub != nil {
+		GlobalHub.BroadcastCounterResolved(bid, targetUserID, accepted)
+	}
+}
+
+func BroadcastBountyCompleted(bounty models.Bounty, mentorID uint, studentID uint) {
+	if GlobalHub != nil {
+		GlobalHub.BroadcastBountyCompleted(bounty, mentorID, studentID)
+	}
+}

@@ -3,13 +3,15 @@ package controllers
 import (
 	"educast/config"
 	"educast/models"
+	"educast/websocket"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 type CompleteBountyRequest struct {
-	Rating int `json:"rating" binding:"required,min=1,max=5"`
+	Rating  int    `json:"rating" binding:"required,min=1,max=5"`
+	Comment string `json:"comment"`
 }
 
 func CompleteBounty(c *gin.Context) {
@@ -60,6 +62,11 @@ func CompleteBounty(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update bounty status"})
 		return
 	}
+	bounty.Status = "CLOSED"
+
+	// Notify both sides in real time so the session resolves for the
+	// mentor too, instead of only after they manually reload.
+	websocket.BroadcastBountyCompleted(bounty, acceptedBid.MentorID, bounty.StudentID)
 
 	// Create RELEASE transaction
 	transaction := models.Transaction{
@@ -84,6 +91,16 @@ func CompleteBounty(c *gin.Context) {
 		newAvg := ((mentor.RatingAvg * float64(totalRatings-1)) + float64(req.Rating)) / float64(totalRatings)
 		config.DB.Model(&mentor).Update("rating_avg", newAvg)
 	}
+
+	// Store the review (one per bounty) so it can be shown on the mentor's profile
+	review := models.Review{
+		BountyID:  bounty.ID,
+		MentorID:  acceptedBid.MentorID,
+		StudentID: userID,
+		Rating:    req.Rating,
+		Comment:   req.Comment,
+	}
+	config.DB.Create(&review)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Bounty completed successfully",

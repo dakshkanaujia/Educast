@@ -1,122 +1,178 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import * as bountyService from '../../services/bounty';
 import { showAlert } from '../../utils/alert';
+import { useBountyPresence } from '../../hooks/useBountyPresence';
+import { Avatar, Badge, Button, Card, Chip, LoadingState, PresenceBadge } from '../../components';
+import { colors, typography, layout } from '../../theme';
 
 const MentorBountyDetailScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
   const [bounty, setBounty] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const presenceCount = useBountyPresence(bountyId);
 
   useEffect(() => {
     loadBountyDetails();
   }, []);
 
   const loadBountyDetails = async () => {
+    setLoading(true);
     try {
       const data = await bountyService.getBountyById(bountyId);
       setBounty(data);
     } catch (error) {
-      showAlert('Error', 'Failed to load bounty details');
+      showAlert('Error', 'Failed to load request details');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!bounty) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState />;
+  if (!bounty) return <LoadingState label="Request not found" />;
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>{bounty.title}</Text>
-        <Text style={styles.description}>{bounty.description}</Text>
-        
-        <View style={styles.infoRow}>
-          <Text style={styles.label}>Budget:</Text>
-          <Text style={styles.budget}>${bounty.budget}</Text>
-        </View>
-
-        {bounty.subject_tag && (
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Subject:</Text>
-            <Text style={styles.tag}>#{bounty.subject_tag}</Text>
+    <View style={styles.outer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.posterRow}>
+          <Avatar name={bounty.student?.name} size={44} />
+          <View style={styles.posterInfo}>
+            <Text style={styles.posterLabel}>Posted by</Text>
+            <Text style={styles.posterName}>{bounty.student?.name || 'Student'}</Text>
           </View>
-        )}
-
-        <View style={styles.infoRow}>
-          <Text style={styles.label}>Posted by:</Text>
-          <Text style={styles.value}>{bounty.student?.name || 'Student'}</Text>
+          <Badge status={bounty.status} />
         </View>
-      </View>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate('PlaceBid', { bountyId })}
-      >
-        <Text style={styles.buttonText}>Place Bid</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <PresenceBadge
+          count={presenceCount}
+          label={`${presenceCount} mentor${presenceCount === 1 ? '' : 's'} already preparing a bid — move fast`}
+          style={styles.presence}
+        />
+
+        <Card style={styles.card}>
+          <Text style={styles.title}>{bounty.title}</Text>
+          <Text style={styles.description}>{bounty.description}</Text>
+
+          {bounty.subject_tag ? (
+            <View style={styles.chipRow}>
+              <Chip label={bounty.subject_tag} />
+            </View>
+          ) : null}
+        </Card>
+
+        <Card hoverable={false} style={styles.budgetCard}>
+          <Text style={styles.budgetLabel}>Student's budget</Text>
+          <Text style={styles.budgetValue}>${bounty.budget}</Text>
+          <Text style={styles.budgetHint}>Your bid can be at, above, or below this amount</Text>
+        </Card>
+      </ScrollView>
+
+      {bounty.status === 'OPEN' && (
+        <View style={styles.footer}>
+          <View style={styles.footerInner}>
+            <Button title="Place Bid" onPress={() => navigation.navigate('PlaceBid', { bountyId })} />
+          </View>
+        </View>
+      )}
+
+      {(bounty.status === 'IN_PROGRESS' || bounty.status === 'CLOSED') && (bounty.bids || []).some((b) => b.is_accepted) && (
+        <View style={styles.footer}>
+          <View style={styles.footerInner}>
+            <Button
+              title={bounty.status === 'CLOSED' ? 'View session' : 'Go to session'}
+              variant={bounty.status === 'CLOSED' ? 'secondary' : 'primary'}
+              onPress={() => navigation.navigate('SessionRoom', { bountyId })}
+            />
+          </View>
+        </View>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  outer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+  },
+  content: {
+    width: '100%',
+    maxWidth: layout.maxWidth,
+    alignSelf: 'center',
+    padding: 20,
+    paddingBottom: 12,
+  },
+  posterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  posterInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  posterLabel: {
+    ...typography.caption,
+  },
+  posterName: {
+    ...typography.bodyStrong,
+  },
+  presence: {
+    marginBottom: 16,
   },
   card: {
-    backgroundColor: 'white',
-    padding: 20,
-    margin: 15,
-    borderRadius: 8,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    ...typography.h1,
+    marginBottom: 10,
   },
   description: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
-    lineHeight: 24,
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
   },
-  infoRow: {
+  chipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    marginTop: 16,
   },
-  label: {
-    fontSize: 16,
-    color: '#666',
+  budgetCard: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  budget: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+  budgetLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.65)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
   },
-  tag: {
-    fontSize: 16,
-    color: '#007AFF',
+  budgetValue: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: colors.onPrimary,
+    marginBottom: 6,
   },
-  value: {
-    fontSize: 16,
-    fontWeight: '600',
+  budgetHint: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.65)',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+  footer: {
+    padding: 20,
+    paddingTop: 12,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  footerInner: {
+    width: '100%',
+    maxWidth: layout.maxWidth,
+    alignSelf: 'center',
   },
 });
 

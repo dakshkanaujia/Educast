@@ -1,25 +1,29 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as bountyService from '../../services/bounty';
+import { showAlert } from '../../utils/alert';
+import { Button, TextArea } from '../../components';
+import { colors, typography, layout } from '../../theme';
 
 const CompletionScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
   const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleComplete = async () => {
     if (rating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+      showAlert('Rating required', 'Please select a star rating before submitting');
       return;
     }
 
     setLoading(true);
     try {
-      await bountyService.completeBounty(bountyId, rating);
-      Alert.alert('Success', 'Bounty completed and mentor rated!');
+      await bountyService.completeBounty(bountyId, rating, comment);
+      showAlert('Success', 'Bounty completed and mentor rated!');
       navigation.navigate('StudentHome');
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || 'Failed to complete bounty');
+      showAlert('Error', error.response?.data?.error || 'Failed to complete bounty');
     } finally {
       setLoading(false);
     }
@@ -27,31 +31,29 @@ const CompletionScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Rate Your Mentor</Text>
-      <Text style={styles.subtitle}>How was your experience?</Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>Rate your mentor</Text>
+        <Text style={styles.subtitle}>How was your session?</Text>
 
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <TouchableOpacity
-            key={star}
-            onPress={() => setRating(star)}
-          >
-            <Text style={styles.star}>
-              {star <= rating ? '★' : '☆'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <View style={styles.starsContainer}>
+          {[1, 2, 3, 4, 5].map((star) => (
+            <TouchableOpacity key={star} onPress={() => setRating(star)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              <Text style={styles.star}>{star <= rating ? '★' : '☆'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TextArea
+          label="Leave a review (optional)"
+          placeholder="What was helpful about this session?"
+          value={comment}
+          onChangeText={setComment}
+          maxLength={500}
+          style={styles.commentField}
+        />
+
+        <Button title="Complete & Submit" onPress={handleComplete} loading={loading} />
       </View>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleComplete}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Completing...' : 'Complete & Submit Rating'}
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -59,41 +61,38 @@ const CompletionScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#f5f5f5',
+    padding: 24,
+    backgroundColor: colors.background,
     justifyContent: 'center',
-    alignItems: 'center',
+  },
+  content: {
+    width: '100%',
+    maxWidth: layout.authMaxWidth,
+    alignSelf: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    ...typography.display,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 40,
+    ...typography.bodySecondary,
+    fontSize: 15,
+    marginBottom: 28,
+    textAlign: 'center',
   },
   starsContainer: {
     flexDirection: 'row',
-    marginBottom: 40,
+    justifyContent: 'center',
+    marginBottom: 28,
   },
   star: {
-    fontSize: 50,
-    marginHorizontal: 5,
-    color: '#FFD700',
+    fontSize: 42,
+    marginHorizontal: 6,
+    color: colors.textPrimary,
   },
-  button: {
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  commentField: {
+    marginBottom: 8,
   },
 });
 

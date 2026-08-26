@@ -1,147 +1,224 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import * as authService from '../../services/auth';
+import { Button, Input } from '../../components';
+import BrandMark from '../../components/BrandMark';
+import { colors, typography, layout, radii } from '../../theme';
+import { showAlert } from '../../utils/alert';
+
+const ROLES = [
+  { value: 'Student', title: "I'm a Student", hint: 'Post requests, hire mentors' },
+  { value: 'Mentor', title: "I'm a Mentor", hint: 'Bid on requests, get paid' },
+];
 
 const SignupScreen = ({ navigation }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('Student');
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
 
-  const handleSignup = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
+  const clearError = (field) => {
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
+  };
 
+  const validate = () => {
+    const next = {};
+    if (!name.trim()) next.name = 'Enter your full name';
+    if (!email.trim()) next.email = 'Enter your email';
+    if (!password) next.password = 'Choose a password';
+    else if (password.length < 4) next.password = 'Use at least 4 characters';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSignup = async () => {
+    if (!validate()) return;
     setLoading(true);
     try {
-      const data = await authService.signup(name, email, password, role);
+      const data = await authService.signup(name.trim(), email.trim(), password, role);
       await signIn(data);
     } catch (error) {
-      Alert.alert('Signup Failed', error.response?.data?.error || 'Could not create account');
+      showAlert('Signup failed', error.response?.data?.error || 'Could not create your account');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+    <KeyboardAvoidingView style={styles.outer} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.content}>
+          <BrandMark size={52} />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        value={name}
-        onChangeText={setName}
-      />
+          <Text style={styles.headline}>Create your account</Text>
+          <Text style={styles.subtext}>
+            Post a request or start bidding as a mentor — takes less than a minute.
+          </Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+          <View style={styles.roleRow}>
+            {ROLES.map((r) => {
+              const selected = role === r.value;
+              return (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[styles.roleOption, selected && styles.roleOptionSelected]}
+                  onPress={() => setRole(r.value)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.roleTitle, selected && styles.roleTitleSelected]}>{r.title}</Text>
+                  <Text style={[styles.roleHint, selected && styles.roleHintSelected]}>{r.hint}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+          <View style={styles.form}>
+            <Input
+              label="Full name"
+              placeholder="Jane Doe"
+              value={name}
+              onChangeText={(t) => {
+                setName(t);
+                clearError('name');
+              }}
+              error={errors.name}
+            />
+            <Input
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={(t) => {
+                setEmail(t);
+                clearError('email');
+              }}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              error={errors.email}
+            />
+            <Input
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                clearError('password');
+              }}
+              secureTextEntry
+              error={errors.password}
+            />
 
-      <View style={styles.pickerContainer}>
-        <Text style={styles.label}>I am a:</Text>
-        <Picker
-          selectedValue={role}
-          onValueChange={setRole}
-          style={styles.picker}
-        >
-          <Picker.Item label="Student" value="Student" />
-          <Picker.Item label="Mentor" value="Mentor" />
-        </Picker>
-      </View>
+            <Button title="Create account" onPress={handleSignup} loading={loading} style={styles.cta} />
 
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleSignup}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Creating Account...' : 'Sign Up'}
-        </Text>
-      </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.linkWrap}>
+              <Text style={styles.linkText}>
+                Already have an account? <Text style={styles.linkStrong}>Log in</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-        <Text style={styles.link}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
+          <Text style={styles.terms}>
+            By creating an account, you agree to EduCast's Terms of Service and Privacy Policy.
+          </Text>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  outer: {
     flex: 1,
-    padding: 20,
+    backgroundColor: colors.background,
+  },
+  scroll: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    padding: 24,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 30,
-    textAlign: 'center',
-    color: '#333',
+  content: {
+    width: '100%',
+    maxWidth: layout.authMaxWidth,
+    alignSelf: 'center',
   },
-  input: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 15,
-    fontSize: 16,
+  headline: {
+    ...typography.display,
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  subtext: {
+    ...typography.bodySecondary,
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 28,
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  roleOption: {
+    flex: 1,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: 14,
   },
-  pickerContainer: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 10,
+  roleOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  label: {
+  roleTitle: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
   },
-  picker: {
-    height: 50,
+  roleTitleSelected: {
+    color: colors.onPrimary,
   },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
+  roleHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  roleHintSelected: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+  form: {
+    marginBottom: 24,
+  },
+  cta: {
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  linkWrap: {
     alignItems: 'center',
-    marginTop: 10,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  linkText: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
-  link: {
-    color: '#007AFF',
+  linkStrong: {
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  terms: {
+    ...typography.caption,
     textAlign: 'center',
-    marginTop: 20,
-    fontSize: 16,
+    lineHeight: 18,
   },
 });
 

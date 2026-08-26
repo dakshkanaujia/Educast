@@ -1,9 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useWebSocket } from '../../context/WebSocketContext';
+import { useBountyPresence } from '../../hooks/useBountyPresence';
 import * as bountyService from '../../services/bounty';
 import * as bidService from '../../services/bid';
 import { showAlert } from '../../utils/alert';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  LoadingState,
+  PresenceBadge,
+  RatingStars,
+  SectionHeader,
+  BottomSheetModal,
+  SuccessOverlay,
+} from '../../components';
+import { colors, typography, layout, radii } from '../../theme';
+
+const formatDuration = (minutes) => {
+  if (!minutes) return null;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  return `${hours % 1 === 0 ? hours : hours.toFixed(1)} hr`;
+};
 
 const BountyDetailScreen = ({ route, navigation }) => {
   const { bountyId } = route.params;
@@ -11,6 +33,17 @@ const BountyDetailScreen = ({ route, navigation }) => {
   const [bids, setBids] = useState([]);
   const [loading, setLoading] = useState(false);
   const { messages } = useWebSocket();
+  const presenceCount = useBountyPresence(bountyId);
+
+  const [selectedBid, setSelectedBid] = useState(null);
+  const [accepting, setAccepting] = useState(false);
+  const [acceptedResult, setAcceptedResult] = useState(null);
+
+  const [counterTarget, setCounterTarget] = useState(null);
+  const [counterPrice, setCounterPrice] = useState('');
+  const [counterNote, setCounterNote] = useState('');
+  const [counterSubmitting, setCounterSubmitting] = useState(false);
+  const [resolvingBidId, setResolvingBidId] = useState(null);
 
   useEffect(() => {
     loadBountyDetails();
@@ -18,9 +51,8 @@ const BountyDetailScreen = ({ route, navigation }) => {
   }, []);
 
   useEffect(() => {
-    // Listen for new bids
-    const newBids = messages.filter(m => m.type === 'bid_created');
-    if (newBids.length > 0) {
+    const relevant = messages.filter((m) => ['bid_created', 'bid_countered', 'bid_counter_resolved'].includes(m.type));
+    if (relevant.length > 0) {
       loadBids();
     }
   }, [messages]);
@@ -30,7 +62,7 @@ const BountyDetailScreen = ({ route, navigation }) => {
       const data = await bountyService.getBountyById(bountyId);
       setBounty(data);
     } catch (error) {
-      showAlert('Error', 'Failed to load bounty details');
+      showAlert('Error', 'Failed to load request details');
     }
   };
 
@@ -46,213 +78,456 @@ const BountyDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleAcceptBid = async (bidId) => {
-    showAlert(
-      'Accept Bid',
-      'Are you sure you want to accept this bid?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Accept',
-          onPress: async () => {
-            try {
-              const result = await bidService.acceptBid(bidId);
-              showAlert('Success', 'Bid accepted!');
-              navigation.navigate('SessionRoom', {
-                roomId: result.room_id,
-                bountyId: bountyId,
-                targetUserId: result.mentor_id
-              });
-            } catch (error) {
-              showAlert('Error', error.response?.data?.error || 'Failed to accept bid');
-            }
-          },
-        },
-      ]
+  const handleConfirmAccept = async () => {
+    if (!selectedBid) return;
+    setAccepting(true);
+    try {
+      const result = await bidService.acceptBid(selectedBid.id);
+      setAcceptedResult({ ...result, mentorName: selectedBid.mentor?.name, price: selectedBid.price_offer });
+      setSelectedBid(null);
+    } catch (error) {
+      showAlert('Error', error.response?.data?.error || 'Failed to accept bid');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const openCounterSheet = (bid) => {
+    setCounterTarget(bid);
+    setCounterPrice(String(bid.price_offer));
+    setCounterNote('');
+  };
+
+  const handleSendCounter = async () => {
+    if (!counterTarget) return;
+    if (!counterPrice || isNaN(parseFloat(counterPrice)) || parseFloat(counterPrice) <= 0) {
+      showAlert('Error', 'Enter a valid amount');
+      return;
+    }
+    setCounterSubmitting(true);
+    try {
+      await bidService.counterBid(counterTarget.id, counterPrice, counterNote);
+      setCounterTarget(null);
+      loadBids();
+    } catch (error) {
+      showAlert('Error', error.response?.data?.error || 'Failed to send counter-offer');
+    } finally {
+      setCounterSubmitting(false);
+    }
+  };
+
+  const handleAcceptCounter = async (bid) => {
+    setResolvingBidId(bid.id);
+    try {
+      await bidService.acceptCounter(bid.id);
+      loadBids();
+    } catch (error) {
+      showAlert('Error', error.response?.data?.error || 'Failed to accept counter-offer');
+    } finally {
+      setResolvingBidId(null);
+    }
+  };
+
+  const handleDeclineCounter = async (bid) => {
+    setResolvingBidId(bid.id);
+    try {
+      await bidService.declineCounter(bid.id);
+      loadBids();
+    } catch (error) {
+      showAlert('Error', error.response?.data?.error || 'Failed to decline counter-offer');
+    } finally {
+      setResolvingBidId(null);
+    }
+  };
+
+  const renderBid = (item) => {
+    const duration = formatDuration(item.duration_minutes);
+    const hasPendingCounter = item.counter_price != null;
+    const isMentorCounter = hasPendingCounter && item.counter_by === 'Mentor';
+    const isMyCounter = hasPendingCounter && item.counter_by === 'Student';
+    const resolving = resolvingBidId === item.id;
+
+    return (
+      <Card key={item.id} style={styles.bidCard}>
+        <TouchableOpacity
+          style={styles.bidHeader}
+          onPress={() => navigation.navigate('MentorProfile', { mentorId: item.mentor_id, mentorName: item.mentor?.name })}
+          activeOpacity={0.7}
+        >
+          <Avatar name={item.mentor?.name} size={44} />
+          <View style={styles.bidHeaderText}>
+            <Text style={styles.mentorName}>{item.mentor?.name || 'Mentor'}</Text>
+            <RatingStars rating={item.mentor?.rating_avg || 0} size={12} />
+          </View>
+          <Text style={styles.bidPrice}>${item.price_offer}</Text>
+        </TouchableOpacity>
+
+        {(duration || item.preferred_time) && (
+          <View style={styles.metaRow}>
+            {duration ? <Text style={styles.metaText}>{duration}</Text> : null}
+            {duration && item.preferred_time ? <Text style={styles.metaDot}>•</Text> : null}
+            {item.preferred_time ? <Text style={styles.metaText}>{item.preferred_time}</Text> : null}
+          </View>
+        )}
+
+        {item.note ? (
+          <View style={styles.noteBox}>
+            <Text style={styles.note}>{item.note}</Text>
+          </View>
+        ) : null}
+
+        {isMentorCounter && (
+          <View style={styles.counterBox}>
+            <Text style={styles.counterLabel}>Mentor countered</Text>
+            <Text style={styles.counterPrice}>${item.counter_price}</Text>
+            {item.counter_note ? <Text style={styles.counterNote}>{item.counter_note}</Text> : null}
+            <View style={styles.counterActions}>
+              <Button
+                title={`Accept $${item.counter_price}`}
+                size="sm"
+                onPress={() => handleAcceptCounter(item)}
+                loading={resolving}
+                style={styles.counterActionButton}
+              />
+              <Button
+                title="Decline"
+                size="sm"
+                variant="secondary"
+                onPress={() => handleDeclineCounter(item)}
+                disabled={resolving}
+                style={styles.counterActionButton}
+              />
+            </View>
+          </View>
+        )}
+
+        {isMyCounter && (
+          <View style={styles.counterBox}>
+            <Text style={styles.counterLabel}>You offered</Text>
+            <Text style={styles.counterPrice}>${item.counter_price}</Text>
+            <Text style={styles.counterWaiting}>Waiting for the mentor to respond</Text>
+          </View>
+        )}
+
+        {bounty?.status === 'OPEN' && !item.is_accepted && !hasPendingCounter && (
+          <View style={styles.actionsRow}>
+            <Button title="Accept Bid" size="sm" onPress={() => setSelectedBid(item)} style={styles.actionButton} />
+            <Button title="Counter" size="sm" variant="secondary" onPress={() => openCounterSheet(item)} style={styles.actionButton} />
+          </View>
+        )}
+        {item.is_accepted && <Badge variant="success" label="✓ Accepted" style={styles.acceptedBadge} />}
+      </Card>
     );
   };
 
-  const renderBid = ({ item }) => (
-    <View style={styles.bidCard}>
-      <View style={styles.bidHeader}>
-        <Text style={styles.mentorName}>{item.mentor?.name || 'Mentor'}</Text>
-        <Text style={styles.bidPrice}>${item.price_offer}</Text>
-      </View>
-      {item.note && <Text style={styles.bidNote}>{item.note}</Text>}
-      {bounty?.status === 'OPEN' && !item.is_accepted && (
-        <TouchableOpacity
-          style={styles.acceptButton}
-          onPress={() => handleAcceptBid(item.id)}
-        >
-          <Text style={styles.acceptButtonText}>Accept Bid</Text>
-        </TouchableOpacity>
-      )}
-      {item.is_accepted && (
-        <Text style={styles.acceptedText}>✓ Accepted</Text>
-      )}
-    </View>
-  );
-
-  if (!bounty) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
+  if (!bounty) return <LoadingState />;
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.bountyCard}>
-        <Text style={styles.title}>{bounty.title}</Text>
-        <Text style={styles.description}>{bounty.description}</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.budget}>${bounty.budget}</Text>
-          <Text style={[styles.status, { color: getStatusColor(bounty.status) }]}>
-            {bounty.status}
-          </Text>
-        </View>
-        {bounty.subject_tag && (
-          <Text style={styles.tag}>#{bounty.subject_tag}</Text>
+    <View style={styles.outer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Card style={styles.bountyCard}>
+          <View style={styles.bountyHeader}>
+            <Badge status={bounty.status} />
+            <Text style={styles.budget}>${bounty.budget}</Text>
+          </View>
+          <Text style={styles.title}>{bounty.title}</Text>
+          <Text style={styles.description}>{bounty.description}</Text>
+          {bounty.subject_tag && <Text style={styles.tag}>#{bounty.subject_tag}</Text>}
+        </Card>
+
+        {bounty.status === 'OPEN' ? <PresenceBadge count={presenceCount} style={styles.presence} /> : null}
+
+        <SectionHeader title="Bids" subtitle={`${bids.length} mentor${bids.length === 1 ? '' : 's'} responded`} />
+
+        {loading && bids.length === 0 ? (
+          <LoadingState style={styles.inlineLoading} />
+        ) : bids.length === 0 ? (
+          <EmptyState title="No bids yet" hint="Mentors will start bidding on your request soon" />
+        ) : (
+          bids.map(renderBid)
         )}
-      </View>
 
-      <Text style={styles.sectionTitle}>Bids ({bids.length})</Text>
+        {bounty.status === 'IN_PROGRESS' && (
+          <Button
+            title="Mark as Complete"
+            variant="secondary"
+            onPress={() => navigation.navigate('Completion', { bountyId })}
+            style={styles.completeButton}
+          />
+        )}
+      </ScrollView>
 
-      {bids.length === 0 ? (
-        <Text style={styles.emptyText}>No bids yet. Waiting for mentors...</Text>
-      ) : (
-        <FlatList
-          data={bids}
-          renderItem={renderBid}
-          keyExtractor={(item) => item.id.toString()}
-          scrollEnabled={false}
-        />
-      )}
+      <BottomSheetModal visible={!!selectedBid} onClose={() => setSelectedBid(null)} title="Accept this bid?">
+        {selectedBid && (
+          <>
+            <View style={styles.sheetMentorRow}>
+              <Avatar name={selectedBid.mentor?.name} size={48} />
+              <View style={styles.sheetMentorText}>
+                <Text style={styles.mentorName}>{selectedBid.mentor?.name || 'Mentor'}</Text>
+                <RatingStars rating={selectedBid.mentor?.rating_avg || 0} size={12} />
+              </View>
+              <Text style={styles.bidPrice}>${selectedBid.price_offer}</Text>
+            </View>
+            <Text style={styles.sheetBody}>
+              Accepting will start your session with {selectedBid.mentor?.name || 'this mentor'} and close bidding
+              on this request. This can't be undone.
+            </Text>
+            <Button title="Accept Bid" onPress={handleConfirmAccept} loading={accepting} style={styles.sheetCta} />
+            <Button title="Cancel" variant="ghost" onPress={() => setSelectedBid(null)} disabled={accepting} />
+          </>
+        )}
+      </BottomSheetModal>
 
-      {bounty.status === 'IN_PROGRESS' && (
-        <TouchableOpacity
-          style={styles.completeButton}
-          onPress={() => navigation.navigate('Completion', { bountyId })}
-        >
-          <Text style={styles.completeButtonText}>Mark as Complete</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+      <BottomSheetModal visible={!!counterTarget} onClose={() => setCounterTarget(null)} title="Propose a different price">
+        {counterTarget && (
+          <>
+            <Text style={styles.sheetBody}>
+              {counterTarget.mentor?.name || 'This mentor'} offered ${counterTarget.price_offer}. Suggest a price that works better for you.
+            </Text>
+            <View style={styles.counterInputRow}>
+              <Text style={styles.counterInputPrefix}>$</Text>
+              <TextInput
+                style={styles.counterInput}
+                value={counterPrice}
+                onChangeText={setCounterPrice}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+            <TextInput
+              style={styles.counterNoteInput}
+              value={counterNote}
+              onChangeText={setCounterNote}
+              placeholder="Add a note (optional)"
+              placeholderTextColor={colors.textTertiary}
+              multiline
+            />
+            <Button title="Send Offer" onPress={handleSendCounter} loading={counterSubmitting} style={styles.sheetCta} />
+            <Button title="Cancel" variant="ghost" onPress={() => setCounterTarget(null)} disabled={counterSubmitting} />
+          </>
+        )}
+      </BottomSheetModal>
+
+      <SuccessOverlay
+        visible={!!acceptedResult}
+        title="Bid accepted"
+        subtitle={
+          acceptedResult
+            ? `You're all set with ${acceptedResult.mentorName || 'your mentor'} for $${acceptedResult.price}.`
+            : ''
+        }
+        ctaLabel="Go to Session"
+        onCta={() => {
+          const roomId = acceptedResult?.room_id;
+          setAcceptedResult(null);
+          navigation.navigate('SessionRoom', { bountyId, roomId, targetUserId: acceptedResult?.mentor_id });
+        }}
+      />
+    </View>
   );
-};
-
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'OPEN': return '#4CAF50';
-    case 'IN_PROGRESS': return '#FF9800';
-    case 'CLOSED': return '#9E9E9E';
-    default: return '#000';
-  }
 };
 
 const styles = StyleSheet.create({
+  outer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+  },
+  content: {
+    width: '100%',
+    maxWidth: layout.maxWidth,
+    alignSelf: 'center',
+    padding: 20,
   },
   bountyCard: {
-    backgroundColor: 'white',
-    padding: 20,
+    marginBottom: 16,
+  },
+  presence: {
     marginBottom: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  description: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 15,
-  },
-  infoRow: {
+  bountyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   budget: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
-  status: {
-    fontSize: 16,
-    fontWeight: '600',
+  title: {
+    ...typography.h1,
+    marginBottom: 8,
+  },
+  description: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: 10,
   },
   tag: {
-    color: '#007AFF',
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    padding: 20,
-    paddingBottom: 10,
+  inlineLoading: {
+    flex: undefined,
+    paddingVertical: 40,
+    backgroundColor: 'transparent',
   },
   bidCard: {
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginBottom: 15,
-    padding: 15,
-    borderRadius: 8,
+    marginBottom: 14,
   },
   bidHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
+  },
+  bidHeaderText: {
+    flex: 1,
+    marginLeft: 12,
   },
   mentorName: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...typography.bodyStrong,
+    marginBottom: 3,
   },
   bidPrice: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
-  bidNote: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  metaText: {
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  metaDot: {
+    ...typography.caption,
+    marginHorizontal: 6,
+  },
+  noteBox: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  note: {
+    ...typography.body,
     fontSize: 14,
-    color: '#666',
+  },
+  counterBox: {
+    backgroundColor: colors.warningBg,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 14,
+  },
+  counterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.warning,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  counterPrice: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  counterNote: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
     marginBottom: 10,
   },
-  acceptButton: {
-    backgroundColor: '#007AFF',
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
+  counterWaiting: {
+    ...typography.caption,
+    marginTop: 2,
   },
-  acceptButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+  counterActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
   },
-  acceptedText: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
-    textAlign: 'center',
+  counterActionButton: {
+    flex: 1,
   },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    padding: 20,
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  actionButton: {
+    flex: 1,
+    marginTop: 0,
+  },
+  acceptedBadge: {
+    marginTop: 14,
   },
   completeButton: {
-    backgroundColor: '#4CAF50',
-    margin: 20,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 20,
   },
-  completeButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sheetMentorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sheetMentorText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  sheetBody: {
+    ...typography.bodySecondary,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  sheetCta: {
+    marginBottom: 10,
+  },
+  counterInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    paddingHorizontal: 16,
+    height: 56,
+    marginBottom: 12,
+  },
+  counterInputPrefix: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginRight: 6,
+  },
+  counterInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    outlineStyle: 'none',
+  },
+  counterNoteInput: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.textPrimary,
+    minHeight: 70,
+    marginBottom: 20,
+    borderWidth: 0,
+    outlineStyle: 'none',
   },
 });
 

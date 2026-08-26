@@ -20,9 +20,10 @@ export const getBountyById = async (id) => {
   return response.data;
 };
 
-export const completeBounty = async (id, rating) => {
+export const completeBounty = async (id, rating, comment) => {
   const response = await api.post(`/api/bounties/${id}/complete`, {
     rating: parseInt(rating),
+    comment: comment || '',
   });
   return response.data;
 };
